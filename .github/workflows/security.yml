@@ -103,7 +103,6 @@ jobs:
 
   container-scan:
     name: Container scanning (Trivy)
-    if: ${{ hashFiles('Dockerfile') != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -114,11 +113,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Detect Dockerfile
+        id: dockerfile
+        shell: bash
+        run: |
+          if [[ -f Dockerfile ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build image
+        if: ${{ steps.dockerfile.outputs.exists == 'true' }}
         run: |
           docker build --pull -t local/app:${{ github.sha }} .
 
       - name: Run Trivy
+        if: ${{ steps.dockerfile.outputs.exists == 'true' }}
         uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: local/app:${{ github.sha }}
@@ -130,14 +141,14 @@ jobs:
           exit-code: "1"
 
       - name: Upload Trivy SARIF
-        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        if: ${{ always() && steps.dockerfile.outputs.exists == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy.sarif
 
       - name: Upload Trivy artifact
-        if: always()
+        if: ${{ always() && steps.dockerfile.outputs.exists == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: trivy-sarif
