@@ -1,0 +1,10 @@
+# Intentionally empty for now.
+#
+# For this repo, start with zero Trivy CVE suppressions.
+# Add entries only after:
+# 1) confirming the finding is a false positive, OR
+# 2) accepting the risk with a ticket / expiry date.
+#
+# Format examples:
+# CVE-2026-12345 # false positive in non-loaded package, review 2026-06-30
+# GHSA-xxxx-yyyy-zzzz # accepted risk until base image update, ticket SEC-123

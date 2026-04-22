@@ -1,0 +1,8 @@
+vendor/
+tmp/
+dist/
+build/
+coverage/
+**/*_test.go
+**/mock_*.go
+**/mocks/**

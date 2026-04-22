@@ -1,0 +1,291 @@
+rules:
+  # -----------------------------
+  # Command execution
+  # -----------------------------
+  - id: go.lang.security.exec-command-tainted
+    message: Avoid using exec.Command with dynamic input. Validate or hardcode arguments.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command($CMD, $ARGS...)
+          - pattern: exec.CommandContext($CTX, $CMD, $ARGS...)
+    metadata:
+      category: security
+      technology: [go]
+
+  - id: go.lang.security.exec-shell
+    message: Avoid shell execution via sh -c or bash -c.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command("sh", "-c", ...)
+          - pattern: exec.Command("/bin/sh", "-c", ...)
+          - pattern: exec.Command("bash", "-c", ...)
+          - pattern: exec.Command("/bin/bash", "-c", ...)
+          - pattern: exec.CommandContext($CTX, "sh", "-c", ...)
+          - pattern: exec.CommandContext($CTX, "/bin/sh", "-c", ...)
+          - pattern: exec.CommandContext($CTX, "bash", "-c", ...)
+          - pattern: exec.CommandContext($CTX, "/bin/bash", "-c", ...)
+    metadata:
+      category: security
+      technology: [go]
+
+  # -----------------------------
+  # Weak crypto / randomness
+  # -----------------------------
+  - id: go.lang.security.weak-hash-md5-sha1
+    message: Do not use MD5 or SHA1 for security-sensitive hashing.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: md5.New(...)
+          - pattern: md5.Sum(...)
+          - pattern: sha1.New(...)
+          - pattern: sha1.Sum(...)
+    metadata:
+      category: security
+      technology: [go]
+
+  - id: go.lang.security.math-rand-for-secrets
+    message: Do not use math/rand for tokens, secrets, or security-sensitive values. Use crypto/rand.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: rand.Int(...)
+          - pattern: rand.Intn(...)
+          - pattern: rand.Read(...)
+          - pattern: rand.Float64(...)
+    metadata:
+      category: security
+      technology: [go]
+
+  # -----------------------------
+  # File permissions
+  # -----------------------------
+  - id: go.lang.security.world-writable-file
+    message: Avoid creating files with overly permissive permissions.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: os.WriteFile($PATH, $DATA, 0o777)
+          - pattern: os.WriteFile($PATH, $DATA, 0o666)
+          - pattern: os.OpenFile($PATH, $FLAGS, 0o777)
+          - pattern: os.OpenFile($PATH, $FLAGS, 0o666)
+    metadata:
+      category: security
+      technology: [go]
+
+  # -----------------------------
+  # HTTP / TLS
+  # -----------------------------
+  - id: go.lang.security.insecure-tls-skip-verify
+    message: InsecureSkipVerify disables TLS certificate verification.
+    severity: ERROR
+    languages: [go]
+    pattern: |
+      &tls.Config{
+        ...
+        InsecureSkipVerify: true,
+        ...
+      }
+    metadata:
+      category: security
+      technology: [go]
+
+  - id: go.lang.security.http-listenandserve-no-timeouts
+    message: Prefer an http.Server with explicit Read/Write/Idle timeouts.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: http.ListenAndServe(...)
+          - pattern: http.ListenAndServeTLS(...)
+    metadata:
+      category: security
+      technology: [go]
+
+  - id: go.lang.security.http-client-no-timeout
+    message: http.Client should set a Timeout.
+    severity: WARNING
+    languages: [go]
+    pattern: |
+      &http.Client{
+        ...
+      }
+    pattern-not: |
+      &http.Client{
+        ...
+        Timeout: $TIMEOUT,
+        ...
+      }
+    metadata:
+      category: security
+      technology: [go]
+
+  # -----------------------------
+  # JWT
+  # -----------------------------
+  - id: go.jwt.none-signing-method-check-missing
+    message: When parsing JWTs, explicitly verify the signing method before trusting the token.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern: |
+          jwt.ParseWithClaims($TOKEN, $CLAIMS, func($TOK *jwt.Token) (interface{}, error) {
+            ...
+            return $KEY, nil
+          })
+      - pattern-not-inside: |
+          jwt.ParseWithClaims($TOKEN, $CLAIMS, func($TOK *jwt.Token) (interface{}, error) {
+            ...
+            if _, $OK := $TOK.Method.(*jwt.SigningMethodHMAC); !$OK {
+              ...
+            }
+            ...
+            return $KEY, nil
+          })
+    metadata:
+      category: security
+      technology: [go, jwt]
+
+  - id: go.jwt.empty-secret-env-fallback
+    message: JWT secret appears to come from an environment variable without a non-empty validation check.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: os.Getenv("JWT_MEMBER_SECRET_KEY")
+          - pattern: os.Getenv("JWT_SECRET")
+    metadata:
+      category: security
+      technology: [go, jwt]
+
+  # -----------------------------
+  # SQL construction
+  # -----------------------------
+  - id: go.sql.string-format-query
+    message: Avoid building SQL queries with string formatting or concatenation. Use parameters/placeholders.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: fmt.Sprintf("..." , ...)
+          - pattern: "..." + $X
+    metadata:
+      category: security
+      technology: [go, sql]
+
+  - id: go.gorm.raw-sql-dynamic
+    message: Review dynamic SQL passed into GORM Raw/Exec/Table/Where/Order clauses.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: $DB.Raw($QUERY, ...)
+          - pattern: $DB.Exec($QUERY, ...)
+          - pattern: $DB.Where($QUERY, ...)
+          - pattern: $DB.Order($QUERY)
+          - pattern: $DB.Table($QUERY)
+    metadata:
+      category: security
+      technology: [go, gorm]
+
+  # -----------------------------
+  # Gin / API safety
+  # -----------------------------
+  - id: go.gin.redirect-dynamic
+    message: Review redirects built from user-controlled input to avoid open redirect issues.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: $C.Redirect($CODE, $URL)
+          - pattern: http.Redirect($W, $R, $URL, $CODE)
+    metadata:
+      category: security
+      technology: [go, gin]
+
+  - id: go.gin.header-write
+    message: Review dynamic response headers to avoid header injection or unsafe security-header overrides.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: $C.Header($K, $V)
+          - pattern: $C.Writer.Header().Set($K, $V)
+          - pattern: $C.Writer.Header().Add($K, $V)
+    metadata:
+      category: security
+      technology: [go, gin]
+
+  - id: go.gin.bindjson-mass-assignment-review
+    message: Review Bind/BindJSON usage for mass-assignment risks. Bind into explicit request DTOs only.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: $C.Bind($OBJ)
+          - pattern: $C.BindJSON($OBJ)
+          - pattern: $C.ShouldBind($OBJ)
+          - pattern: $C.ShouldBindJSON($OBJ)
+    metadata:
+      category: security
+      technology: [go, gin]
+
+  # -----------------------------
+  # Secrets / credentials
+  # -----------------------------
+  - id: generic.hardcoded-secret-like-value
+    message: Hardcoded secret-like value detected. Move to environment or secret manager.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern-regex: '(?i)(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*"[^"]{8,}"'
+          - pattern-regex: "(?i)(api[_-]?key|secret|token|password|passwd|pwd)\\s*[:=]\\s*'[^']{8,}'"
+    metadata:
+      category: security
+      technology: [go]
+
+  - id: aws.static-credentials-review
+    message: Review static AWS credential usage. Prefer IAM roles or external secret injection.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: credentials.NewStaticCredentialsProvider(...)
+          - pattern: aws.Credentials{...}
+    metadata:
+      category: security
+      technology: [go, aws]
+
+  # -----------------------------
+  # Error handling / panic leakage
+  # -----------------------------
+  - id: go.panic-on-runtime-error
+    message: Avoid panic in request-serving or startup paths when graceful error handling is possible.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern: panic(...)
+    metadata:
+      category: security
+      technology: [go]
+
+  - id: go.http-return-raw-error
+    message: Avoid returning raw internal error strings directly to clients.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: $C.JSON($CODE, gin.H{"error": $ERR.Error()})
+          - pattern: $C.AbortWithStatusJSON($CODE, $ERR.Error())
+          - pattern: response.Error($CODE, $ERR.Error())
+    metadata:
+      category: security
+      technology: [go]
