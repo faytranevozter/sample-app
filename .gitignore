@@ -1,0 +1,5 @@
+.env
+server.log
+.DS_Store
+build-app
+coverage.out
