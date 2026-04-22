@@ -31,9 +31,20 @@ jobs:
           fetch-depth: 0
 
       - name: Run Gitleaks
+        id: gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        if: always()
+        run: |
+          if [[ "${{ steps.gitleaks.outcome }}" == "success" ]]; then
+            echo "## Secret Scan (Gitleaks) ✅ Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Secret Scan (Gitleaks) ❌ Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Gitleaks detected secrets or encountered an error. Check the step logs for details." >> $GITHUB_STEP_SUMMARY
+          fi
 
   sast:
     name: SAST (Semgrep CE)
@@ -60,6 +71,7 @@ jobs:
       # Best practice for strict OSS-only usage:
       # keep your Semgrep rules in-repo under .semgrep/
       - name: Run Semgrep CE
+        id: semgrep
         run: |
           test -d .semgrep
           semgrep scan \
@@ -85,6 +97,16 @@ jobs:
           name: semgrep-sarif
           path: semgrep.sarif
           retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          if [[ "${{ steps.semgrep.outcome }}" == "success" ]]; then
+            echo "## SAST (Semgrep CE) ✅ Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## SAST (Semgrep CE) ❌ Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Semgrep found issues or encountered an error. Review \`semgrep.sarif\` artifact for details." >> $GITHUB_STEP_SUMMARY
+          fi
 
   sca:
     name: SCA (OSV-Scanner)
@@ -129,6 +151,7 @@ jobs:
           docker build --pull -t local/app:${{ github.sha }} .
 
       - name: Run Trivy
+        id: trivy
         if: ${{ steps.dockerfile.outputs.exists == 'true' }}
         uses: aquasecurity/trivy-action@0.35.0
         with:
@@ -154,3 +177,16 @@ jobs:
           name: trivy-sarif
           path: trivy.sarif
           retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          if [[ "${{ steps.dockerfile.outputs.exists }}" != "true" ]]; then
+            echo "## Container Scan (Trivy) ⏭️ Skipped" >> $GITHUB_STEP_SUMMARY
+            echo "No Dockerfile found in repository root." >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ steps.trivy.outcome }}" == "success" ]]; then
+            echo "## Container Scan (Trivy) ✅ Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Container Scan (Trivy) ❌ Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Trivy found HIGH/CRITICAL vulnerabilities or encountered an error. Review \`trivy.sarif\` artifact for details." >> $GITHUB_STEP_SUMMARY
+          fi
